@@ -1,0 +1,133 @@
+---
+title: "Lab 8: Non-parametric methods"
+author: "Chang-Hsin Lee"
+date: "November 6, 2016"
+output: 
+  html_document:
+    theme: spacelab
+    code_folding: show
+    toc: yes
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, collapse=TRUE, result="hold", fig.align="center",  warning=FALSE, message=FALSE)
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+```
+
+## One-versus-all
+
+The classifications illustrated here are all binary classifications. What if we have more than two classes, i.e. a multiclass classification problem? In practice, many people extend binary classification algorithms to accomodate multiclass classification by the *one-versus-all* method. Let us suppose we have three class labels A, B, and C. To run a one-versus-all linear regression, we first create a new class label ClassA which takes the values "A" or "Not A" according to the true label, and then run a linear regression on ClassA. Then we create a new class label ClassB with values "B" or "Not B", then run a linear regression on ClassB. Finally, do the same with C. As a result, for each observation $x_0$ there will be three probabilities associated with ClassA, ClassB, and ClassC. We then classify $x_0$ to the class with highest probability. 
+
+## Decision boundary
+
+In the case of binary classfication, a *decision boundary* is where the classfier gives ambiguous results. If we set the classfier with threshold probability of 50\%, then decision boundary is precisely where the class probability is 50/50. Decision boundary therefore partitions the underlying dataset into two classes where points on the same side of the boundary are classified to the same class. When we having two continuous predictors and not too much data, we can visualize the decision boundary in a scatterplot that helps us understand the performance of the classifier. One way to do so is adding a contouring layer of probability with `geom_contour` to a scatterplot. If you want a pretty decision boundary, you should check out the [answer of a stackexchange question](http://stackoverflow.com/questions/31234621/variation-on-how-to-plot-decision-boundary-of-a-k-nearest-neighbor-classifier-f).
+
+## K-nearest neighbors
+
+All the methods we have seen so far are *parametrized methods* because the model output can be summarized by a set of parameters. On the other hand, there are also *non-parametric methods* that requires no assumption on the form of model. Here I will show you k-nearest-neighbor (KNN) classifer as an example of of the non-parametric methods. Given a positive interger $\mbox{K}$ and a test obeservation $x_0$, KNN first identifies K points in the training data that are closest to $x_0$, and then classify $x_0$ to the majority class in the $K$ points, and breaks the tie randomly if there is a tie. Despite simple in concept, KNN can be suprisingly effective at times.
+
+### KNN Classification
+
+Make a KNN model and make a decision boundary.
+Choose different k?
+
+The library `class` in R provides a function `knn()` that performs KNN. Unlike previous methods of linear regression and logistic regression, its modeling building and prediction are performed within the same line. The function `knn()` requires four inputs:
+
+* A data frame containing the predictors associated with training data.
+* A data frame containing the predictors associated with testing data.
+* A vector (of factor) containing class labels from training data.
+* A value for K, the number of nearest neighbors used in making prediction.
+
+`test.label <-  knn(train.predictor, test.predictor, train.label, K)`
+
+We also need to configure the random number generator with `set.seed()` because `knn()` breaks the tie randomly when multiple points are tied as nearest neighbors. By setting the random to a specific number, the predictions are guaranteed to be the same each time for the same data.
+
+The data here is `Ionosphere` from the machine learning benchmark package `mlbench`. It is a radar data collected by a system in Goose Bay, Labrador, where the label `Class` says "good" if there is evidence of some type of structure in the ionosphere and "bad" otherwise. You can read more in `?mlbench::Ionosphere` Here I will predict `Class` with two of two variables `V3`, `V4`, using three different values of $\mbox{K}=$ 1, 5, or 100. Note that I removed duplicated rows and split the remaining data into a training set and a testing set before performing KNN.
+
+```{r}
+library(class)
+library(mlbench)
+data(Ionosphere) # total of 351 observations
+ion <- select(Ionosphere, V3, V4, Class) %>% distinct #remove duplicated rows
+
+set.seed(1234) # set random number generator seed for sampling
+ion.train <- ion %>% dplyr::sample_n(200) # breaking into training set (sampling first 200) 
+ion.test <- dplyr::setdiff(ion, ion.train) # and a testing set (the rest)
+
+train.data <- ion.train %>% select(-Class)
+test.data <- ion.test %>% select(-Class)
+train.label <- ion.train$Class
+test.label <- ion.test$Class
+
+set.seed(1234)
+knn.pred.1 <- knn(train.data, test.data, train.label, 1) #K=1
+table(knn.pred.1, test.label)
+
+set.seed(1234)
+knn.pred.10 <- knn(train.data, test.data, train.label, 10) #K=10
+table(knn.pred.10, test.label)
+
+set.seed(1234)
+knn.pred.100 <- knn(train.data, test.data, train.label, 100) #K=100
+table(knn.pred.100, test.label)
+```
+
+### Decision boundary of KNN
+
+Here I will plot the decision boundaries when $\mbox{K}=$ 5, 10, and 15.
+
+```{r}
+test <- test.data %>% mutate(
+  pred.5 = knn(train.data, test.data, train.label, 5),
+  pred.10 = knn(train.data, test.data, train.label, 10),
+  pred.15 = knn(train.data, test.data, train.label, 15)
+)
+
+# create underlying grid
+grid <- expand.grid(
+  V3=seq(-1,1,length.out=100),
+  V4=seq(-1,1,length.out=100)) 
+
+set.seed(1234)
+grid5.pred <-  knn(train.data, grid, train.label, 5) # K=5 for grid
+
+set.seed(1234)
+grid10.pred <-  knn(train.data, grid, train.label, 10) # K=10 for grid
+
+set.seed(1234)
+grid15.pred <-  knn(train.data, grid, train.label, 15) # K=15 for grid
+
+
+# k=5
+ggplot(test, aes(x=V3, y=V4)) +
+  geom_point(aes(pch=pred.5, color=pred.5), size=3) +
+  geom_point(data=grid, mapping=aes(x=V3, y=V4, color=grid5.pred), alpha=.2) +
+  ggtitle("K=5")
+
+# k=10
+ggplot(test, aes(x=V3, y=V4)) +
+  geom_point(aes(pch=pred.10, color=pred.10), size=3) +
+  geom_point(data=grid, mapping=aes(x=V3, y=V4, color=grid10.pred), alpha=.2) +
+  ggtitle("K=10")
+
+# k=15
+ggplot(test, aes(x=V3, y=V4)) +
+  geom_point(aes(pch=pred.15, color=pred.15), size=3) +
+  geom_point(data=grid, mapping=aes(x=V3, y=V4, color=grid15.pred), alpha=.2) +
+  ggtitle("K=15")
+
+```
+
+### Downsides
+
+There are several potential downsides of the KNN method: 
+
+* It does not work well with categorical predictors, although it is possible to code them in by including a dummy variable for each level like linear regression.
+* The algorithm weighs each predictor differently depending on the range and spread. The meaning of being "nearby" for a variable with a range of $[0,1000]$ is different from another variable with a range of $[0,1]$, so some degree of *standardization* of the predictors may be necessary before performing KNN. One way to do so is scaling and centering each continuous predictor so they all have mean 0 and standard deviation 1.
+* It suffers from a phenomenon called *the curse of dimensionality.* Basically, in high dimensional data it is very difficult to find "nearby" points because a difference in a few variables makes two data points far apart. Thus KNN does not generalize well to high dimensional data.  
+* KNN can not make prediction on observations with missing values. It may be helpful to run *multiple imputation* when there are missing values.

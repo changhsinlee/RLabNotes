@@ -1,0 +1,220 @@
+---
+title: "Lab 4: Exploratory Data Analysis"
+author: "Chang-Hsin Lee"
+date: "October 10, 2016"
+output: 
+  html_document:
+    theme: spacelab
+    toc: yes
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, collapse=TRUE, result="hold")
+```
+
+There are many questions one can ask about data at the exploratory stage. Such questions generally fall  into one of the two following groups: *Variation* within a variable and *covariation* between variables. 
+
+## Variation
+
+Variation describes how the value of a variable changes between different observations. Recognizing patterns or trends of variation provides insight into data and often lead to more interesting questions that can be further tested with statistical tools. Variations are the naturual behavior of data. For continuous variables, no two observated values should ever be the same (before rounding) due to measurement error and random noise. For categorical variables, the values often fall into a few groups but can also change when we take measurements on different subjects or at different times. Now that we have ```ggplot2``` and ```dplyr``` in our toolbox, I will show you some common themes in studying the variations within data.
+
+```{r, warning=FALSE, message=FALSE}
+library(ggplot2)
+library(dplyr)
+```
+
+The first step in understanding variation is to check whether there are certain groups of values that the majority of data falls into by visualizing distributions of variables. Let's go back to the ```diamonds``` data in the ggplot2 package. The distribution of the categorical variable ```cut``` can be shown in a bar chart. We can also count the number of diamonds in each category using ```count()``` from dplyr.
+
+```{r}
+data(diamonds)
+ggplot(data = diamonds) + geom_bar(aes(x = cut))
+diamonds %>% count(cut)
+```
+
+For continuous variables, the plot analogous to a bar chart is the histogram. Since there is no grouping variable, we make our own groups by throwing observations into bins. The example here uses fixed binwidth. It is a good practice to try out histograms of different binwidths before going into more detail. You can also count the number of observations in each bin by combining ```dplyr::count()``` and ```ggplot2::cut_width()```.
+
+```{r}
+ggplot(data = diamonds) + geom_histogram(aes(x = carat), binwidth = .5)
+diamonds%>% count(cut_width(carat, .5))
+```
+
+### Typical values
+
+From the bar chart, it is easy to see that most diamonds have ideal cut, the highest quality, and relatively few are in the fair or the lowest quality category. This shows there may be some trend in the distribution of ```cut``` No matter you are working with continuous or categorical variables, understanding the distribution a variables helps us form interesting questions around data. Some natural questions to explore along this line are:
+
+* What are some most common values and why?
+* What values are rare? 
+* Are there any unexpected pattern?
+
+Let's go back to the histogram of ```carat```. When we first used a ```binwidth = .5```, each bin has thousands of diamonds in it. The selection of binwidth may have been too liberal to find any pattern in the data. I will try again by setting ```binwidth=.01```.
+
+```{r}
+ggplot(data = diamonds) + geom_histogram(aes(x = carat), binwidth = .01)
+```
+
+We see there are some clusters in the distribution of ```carat```. As the plot suggests, there are relatively few diamonds that has a mass of greater than 3 carat. We can zoom in to the interesting part which has less than 3 carats by filtering based on this criteria. I also added a few more ticks in the x-axis.
+
+```{r}
+smaller = diamonds %>% filter(carat < 3)
+ggplot(data = smaller) + geom_histogram(aes(x = carat), binwidth = .01) +
+  scale_x_continuous(breaks=seq(0,3,.5)) # breaks at a .5 interval between 0 to 3
+```
+
+Now we can ask more questions based on this histogram:
+
+* Why are there more diamonds at whole carats and common fractions of carats?
+* Why are there more diamonds slightly to the right of each peak than to the left?
+
+
+
+### Outliers
+
+A big part of exploratory analysis on variation is to identify possible outliers in the data. Outliers are observations with values far outside the norm. Sometimes outliers are results of erroneous data. Identifying outliers can lead to better data collection process or better experiment design. Other times, outliers can be the first sign of a brand new discovery. In any case, checking for outliers is important before performing any in-depth data analysis, especially when the modeling is involved. Let us look at an example with the ```y``` variable, the width of a diamond, from the diamonds dataset. 
+
+```{r}
+ggplot(diamonds, aes(x=y)) + geom_histogram(binwidth=.5)
+```
+
+Common bins in the histogram contain thousands of obeservations which makes it difficult to spot any rare bin that may only have a handful of observations. To identify unusual values, I zoom in on the y-axis with ```coord_cartesian()```:
+
+```{r}
+ggplot(diamonds, aes(x=y)) + geom_histogram(binwidth=.5) +
+  coord_cartesian(ylim = c(0,20))
+```
+
+Zooming in shows there are three unusual values: 0, a bin between 20 and 40, and another bin close to 60. Next I pick these outliers out.
+
+```{r}
+unusual <- diamonds %>% filter(y < 1 | y > 20)
+unusual
+```
+
+A diamond that has a width of 0mm simply does not exist, so these values are incorect. The measurements of 32mm and 59mm also suggest questionable data because you have two diamonds with over an inch long that do not cost millions of dollars. 
+
+What do we do with outliers? When you see an outlier, you should not drop them without justification. However, if they do not have much impact on the result of analysis and you can't figure out the cause of unusual values, it is reasonable to replace unusual values with missing values.
+
+### Missing values
+
+There are two options in dealing with unusual values.
+
+1. Drop the entire row
+```{r, indent="    "}
+diamonds2 <- diamonds %>% filter(between(y,3,20)) 
+```
+    This method is quick and easy but is not recommended because other columns in the row may still contain useful information.
+
+2. Replace unusual values with missing values
+```{r, indent="    "}
+diamonds2 <-  diamonds %>% mutate(y = ifelse(y < 3 | y > 20, NA, y))
+```
+    By replacing unusual values with missing values, we can still access other parts of the observation.
+    
+In ggplot2, missing values are removed with a warning when plotted. You can set ```na.rm=TRUE``` within the ```geom``` to suppress the warning. 
+
+```{r}
+ggplot(data = diamonds2, aes(x = x, y = y)) + geom_point()
+```
+
+## Covariation
+
+Covariation describes the behavior between variables. In other words, studying covariation means we are studying the relationship between two or more variables. Just like in the variation case where we make one variable plots to investigate the changes within a variable, we make multivariate plots to study covariation. We have learned several plots in the past that serve this purpose:
+
+* Scatterplot
+* Boxplot
+* Violin plot
+
+Here I will show you a few more plotting techniques that may be helpful in studying covariation. The actual analysis is often tied with finding a suitable model between variables, which we will start by learning how to run a inear regression in the next session.
+
+### One categorical & one continuous variable
+
+When we put an additional aesthetic to a histogram or a density plot, it also becomes a multivariate plot. Histogram is an excellent choice when we only need to plot one variable. However, it is too difficult to read when we add a categorical variable (say with the aesthetic of color) to compare variations between different groups. For that purpose, a variant of histogram called frequency polygon comes in handy. A frequency polygon is generated by connecting the top of each bin in a histogram with a line segment. In ggplot2, it is created by ```geom_freqpoly()```. For example, I can explore how price of a diamond varies with its quality.
+
+```{r}
+ggplot(diamonds, aes(x = price)) + geom_freqpoly(aes(color = cut), binwidth = 500)
+```
+
+It is difficult to identify the change in distribution between groups because each group is made up with a different number of observations. In ggplot2, we can fix this by displaying other statistics other than count. For example, we can display density (by specifying ```y = ..density..```) which normalizes each frequency polygon so the area under curve of each group is one. plotly is a nice package to use here in conjunction with ```ggplot2``` that makes interactive plots simply by wrapping a ggplot object with the function ```ggplotly()```.
+
+```{r}
+library(plotly)
+ggplotly(ggplot(diamonds, aes(x = price, y = ..density..)) + geom_freqpoly(aes(color = cut), binwidth = 500))
+```
+
+We have talked about boxplot. Here I will just show you a useful function ```reorder()``` that rearranges the boxes based on their median values. Dataset is ```mpg``` from ggplot2.
+
+```{r}
+ggplot(mpg, aes(x = class, y = hwy)) + geom_boxplot() 
+```
+
+We can choose which summary statistic to sort with ```FUN``` so we can see the trend better. Also when you have long variable names, it may be a goot idea to flip the plot by 90&deg; with ```coord_flip()```.
+
+```{r}
+ggplot(mpg, aes(x = reorder(class, hwy, FUN = median), y = hwy)) + 
+  geom_boxplot() + coord_flip()
+```
+
+### Two categorical variables
+
+When we have two categorical variables, we can form a matrix of counts for each pair of possible values. How do we visualize such a matrix? One way is to use ```geom_count()``` which displays the number of observations in each pair in the size of a circle. Try combining this plot with the plotly package.
+
+```{r}
+ggplot(data = diamonds) + geom_count(aes(x = cut, y = color))
+```
+
+Alternatively, we can make a heat map. A heat map displays the number of observations by filling squares with a smooth color gradient. By combining the ```count()``` function in dplyr and ```geom_tile()``` in ggplot2, we generate a heatmap between color and count of diamonds.
+
+```{r}
+diamonds %>% count(color, cut) %>%
+  ggplot(aes(x = color, y = cut)) + geom_tile(aes(fill = n))
+```
+
+### Two continuous variables
+
+The cookie-cutter graphic in the two continuous variables case is the scatterplot with ```geom_point()```, which we have done multiple times already. The problem with the naive scatterplot is overplotting tend to mask useful information when the size of dataset is large.
+
+```{r}
+ggplot(diamonds, aes(x = carat, y = price)) + geom_point()
+```
+
+We can fix this problem By tweaking transparency of the dots with the ```alpha``` aesthetic.
+```{r}
+ggplot(diamonds, aes(x = carat, y = price)) + geom_point(alpha = 1/10)
+```
+
+With very large datasets, even tweaking transparency may not work. In such situation you can use the heatmap idea by making 2D bins, just like how we make 1D bins in histograms and frequency polygons. ```geom_bin2d()``` divides the coordinate plane into 2D square bins then display the count by a smooth color gradient. There is also a hexagonal binning option available with ```geom_hex()``` but requires an extension package of ggplot2 called ```hexbin```.
+
+```{r}
+ggplot(data = diamonds, aes(x = carat, y = price)) + geom_bin2d()
+```
+
+### Cheat sheet
+
+There are many more possible combinations of categorical/continuous variables, each has one or several ways to visualize. The [ggplot2 cheatsheet](https://www.rstudio.com/wp-content/uploads/2015/03/ggplot2-cheatsheet.pdf) is a terrific reference in picking the right visualization to use. Please take a look at it!
+
+### Patterns
+
+Why do we care about patterns? Because pattern may hint a systematic relationship between the variables. The most exciting moments for me in my experience with data analysis happen when I discover previously unknown relationships between variables. Whenever you spot a pattern, here are some good questions to ask:
+
+* Is this pattern due to an actual relationship between variables or pure coincidence?
+* What are some ways to describe the relationship implied by this pattern? (Linear? Polynomial? More complicated models?)
+* How strong is the relationship between the variables?  
+    A common sin in data analysis is the use of *p-value* with linear regression. We will get more into that if time permits.
+* What are other variables that might factor into this relationship?
+* Does the relationship change when we zoom in to subgroups of the data?
+
+Statisticians describe the relationships between variables with the language of modeling. Once a suitable model is built that spits out predictions of certain values of the data, subtracting the predictions from the observed values gives us residuals which one can use to access the model accuracy. In the next lab, we will start modeling with linear regression.
+
+
+<!-- ## Techniques
+### Compare counts of two categorical variables with heatmap
+
+### Bin two continuous variables with a grouped boxplot (alternative to histogram)
+
+### Adjusting for calendar
+
+### Subtract the smooth fit
+
+example: light speed. Why do we use the mean of experimental observations as the speed of light? Because fit + residual.
+
+### residual -->

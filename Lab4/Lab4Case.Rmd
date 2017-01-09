@@ -1,0 +1,68 @@
+---
+title: "Case Studies Before Lab 4"
+author: "Chang-Hsin Lee"
+date: "October 4, 2016"
+output: 
+  html_document:
+    theme: spacelab
+    toc: yes
+    toc_float: true
+---
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, collapse=TRUE, result="hold")
+```
+
+So far in the first part of the course, we have learned about basic plotting and data transformation in R, which will be essential tools in the second part of our course: exploratory data analysis (EDA). Promoted first by Tukey et. al. back in 1960s, it has become standard practice in the statistics world today. Before telling you what EDA is or how to carry out EDA, I will present some examples here and focus on the **variance** and **covariance** within data.
+
+## Case study: Shot distance
+
+We can make a histogram of shot distance on all field goal attempts in the 14-15 NBA season. What are some questions that we can raise based on the following two graphics on shot distance?
+
+```{r}
+data.nba <- read.csv("shot_logs.csv",stringsAsFactors = FALSE)
+ggplot(data = data.nba) + geom_histogram(aes(x = SHOT_DIST), binwidth = .1)
+ggplot(data = data.nba, aes(x = SHOT_DIST, color = factor(PTS_TYPE))) + geom_freqpoly(binwidth = .1)
+```
+
+## Case study: Speed of light
+
+One can argue that the famous "failed" scientific experiment in history is the [Michelson-Morley experiment](https://en.wikipedia.org/wiki/Michelson%E2%80%93Morley_experiment). Performed in Cleveland, Ohio in 1887, Michelson and Morley were set to detect the "aether flow" whose unknown velocity affects the velocity of light going in different directions. The results from five experiments with 20 runs each is displayed as a histogram. (The unit is in km/sec, with 299000 subtracted.)
+
+```{r}
+data(morley)
+n_distinct(morley$Speed)
+ggplot(morley, aes(x=Speed)) + geom_histogram(binwidth=20) + scale_y_continuous(breaks=seq(0,10,2))
+```
+
+What led them to believe this experiment was a failure? (Nobody says "velocity of light" anymore but "speed of light.")
+
+## Anscombe's quartet
+
+Why do we need to perform exploratory analysis? In particular, why is it always a good idea to start with making plots on the data? Can't we use only summary statistics? The reason is that summary statistics is simply insufficient in describing data. Anscombe's quartet is a collection of four datasets that illustrates the importance of plotting in exploratory analysis and the effect of outliers. To reproduce the follow code, make sure you have installed the ```gridExtra``` package.
+
+```{r, warning=FALSE, message=FALSE}
+data(anscombe)
+library(ggplot2)
+library(gridExtra)
+summary(anscombe)
+```
+Each dataset shares
+
+* the same mean of ```x```: 9,
+* the same sample variance of ```x```: 11,
+* the same mean of ```y```: 7.50,
+* the same sample variance of ```y```: 4.12,
+* the same correlation between ```x``` and ```y```: 0.816,
+* the same linear regression line: y = 3.00 + 0.500x.
+
+Despite their similarities in summary statistics, when you fit the datasets with a straight line, it is apparent that only the first dataset resulted in a good fit. The second dataset is better off with a quadratic fit (or a polynomial fit.) The third data has an outlier which heavily skewed the fit. Finally, the fourth dataset contains a high leverage point, and should never be fitted to begin with. Don't build a model without taking a look at data!
+
+```{r}
+p <- ggplot(data=anscombe) + expand_limits(x = 0, y = 0) + scale_x_continuous(breaks = seq(0, 20, 2)) + scale_y_continuous(breaks = seq(0, 12, 2)) + xlim(0,20)
+p1 <- p + geom_point(aes(x=x1,y=y1)) + geom_smooth(aes(x=x1,y=y1), method=lm, se=FALSE, fullrange=TRUE)
+p2 <- p + geom_point(aes(x=x2,y=y2)) + geom_smooth(aes(x=x2,y=y2), method=lm, se=FALSE, fullrange=TRUE)
+p3 <- p + geom_point(aes(x=x3,y=y3)) + geom_smooth(aes(x=x3,y=y3), method=lm, se=FALSE, fullrange=TRUE)
+p4 <- p + geom_point(aes(x=x4,y=y4)) + geom_smooth(aes(x=x4,y=y4), method=lm, se=FALSE, fullrange=TRUE)
+grid.arrange(p1,p2,p3,p4)
+```

@@ -1,0 +1,202 @@
+---
+title: "Lab 9: Model assessment part 1"
+author: "Chang-Hsin Lee"
+date: "November 15, 2016"
+output: 
+  html_document:
+    theme: spacelab
+    code_folding: show
+    toc: yes
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, collapse=TRUE, result="hold", fig.align="center",  warning=FALSE, message=FALSE)
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(broom)
+library(caret)
+```
+
+In this lab, I will show you why sometimes the "most accurate" model may not be the best model. Then I will cover some basics of model assessment with a popular resampling technique called *cross-validation* using a package called `caret`. In the process, I will also introduce how to write a for-loop in R and the list data type.
+
+## Overfitting
+
+Here I generated two datasets whose points should fall on the straight line`y=x` if the variable `y` were not corrupted by noises. Next, I fit two linear models to the training data, one with a straight line `y~x` and one with a 10 degree polynomial `y~poly(x,10)`.
+
+```{r}
+# training set
+set.seed(1234)
+x = seq(1,20,by=1)
+overfit.train <- data.frame(
+  x = x,
+  y = x + 5*rnorm(20)
+  )
+# test set
+set.seed(5678)
+overfit.test <- data.frame(
+  x = x,
+  y = x + 5*rnorm(20)
+  )
+# train on training set
+lm.1 <- lm(y ~ x, data=overfit.train)
+lm.10 <- lm(y~poly(x,10), data=overfit.train)
+
+lm.1 %>% broom::glance() %>% select(r.squared, sigma)
+lm.10 %>% broom::glance() %>% select(r.squared, sigma)
+
+# predict on test set
+(predict(lm.1, overfit.test) - overfit.test$y) %>% sd
+(predict(lm.10, overfit.test) - overfit.test$y) %>% sd
+```
+```{r, echo=FALSE}
+# plot training set
+ggplot(overfit.train, aes(x=x,y=y)) + geom_point() + geom_smooth(method="lm", se=FALSE, aes(color="deg 1")) +
+  geom_smooth(method="lm", formula=y~poly(x,10), se=FALSE, aes(color="deg 10")) + ggtitle("Training set") +
+  scale_colour_manual(name="model", values=c("blue", "red"))
+```
+
+```{r table2, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+options(digits = 2)
+tab1 <- "
+|                | training RSE | test RSE |
+|----------------|--------------|----------|
+| y ~ x          | 5.11         | 5.09     |
+| y ~ poly(x,10) | 4.47         | 7.24     |
+"
+
+cat(tab1)
+```
+
+As it turns out, fitting with a 10 degree polynomial on training set resulted in a lower RSE and higher $\mbox{R}^2$ than fitting with a straight line. However, when we apply the two models on new data, the 10 degree model flopped. Why so? From the figure, my guess is that the 10 degree model has *overfitted* the training data. The model has learned the random noise in the data because the model assumption is too flexible. 
+
+
+In the figure I plotted two models on a simulated dataset. It turns out the red model has a lower RMSE error than the blue model. However, it is reasonable to assume that the blue model will outperform the red model on future data inputs because the red one is too sensible to noise.
+
+
+In statistical modeling, we like to split the data into two subsets: 
+
+* training set: the data used to train a model, and
+* test set: the data to test the performance of model.
+
+So far, all the error measure associated with a model we have seen are all *training error* because we perform the error analysis directly on the training set. However, there is no guarantee that the model should result in an error of the same order when it is used to predict on a new data. Because most of the time we are interested in predicting the outcome even when the true outcome has yet been recorded, we need a reliable way to estimate the test error using the training data.
+
+## Some coding stuff
+
+### Control flow: for loop
+
+```{r, eval=FALSE}
+for (i in sequence){
+  statements
+}
+```
+
+For example
+
+```{r}
+x <- 0
+for (i in c(2,3,5,7,100)){
+  print(i)
+  x <- x + i
+}
+x
+```
+
+### Data type: list
+
+A list in R is an ordered collection of objects. The objects can be anything and objects within the same list can be of different data types. You can use `list()` to preallocate a list object. To access objects within a list, you need to use `[[]]` in comparison to vector, matrices, and data frames which use `[]`. 
+
+```{r}
+mylist <- list(
+  data1 = data.frame(xx=c(1,2,3), yy=c("a","b","c")),
+  chr1 = c("hello","world"),
+  zzz = c(1,.5,sqrt(2),pi))
+mylist
+mylist[[1]]
+mylist[[2]]
+mylist[[3]]
+```
+
+## Cross validation
+
+Cross validation (CV) is a popular technique that is used to estimate the test error. Let me use the 5-fold cross validation as an example. In performing a 5-fold CV, first I split the training data (randomly) into five equally sized subsets A, B, C, D, and E. Next, I hold out one of the subset, say A, and used the remaining data B,C,D and E to build a model which I call $\mbox{model}_A$. Then I calculate the test error associated with predicting $A$ using $\mbox{model}_A$ and call the error $\epsilon_A$. Similarly, by holding out other subsets, we can the remaining data to build a model and obtain corresponding test error on the held out set $\epsilon_B, \ldots, \epsilon_E$. Finally, the 5-fold CV error is the average of $\epsilon_A, \ldots, \epsilon_E$. In general, one can run a K-fold cross validation, which in each step
+
+* trains a model using K-1 folds as training data, then
+* validates on the remaining 1 fold of data.
+
+The performance measure reported by CV is the average of said measure iterated over all K-folds.
+
+### Package: caret
+
+caret is a powerful package developed to streamline the model selection process in machine learning. There are a handful of ways to implement cross-validation in caret. Here I will demonstrate the core idea of cross validation.
+
+* [Documentation for caret](http://topepo.github.io/caret/index.html)
+
+
+### Partitioning data
+
+For study purpose, we first need to hold out part of data as the test set that we can check our cross validation error estimate against. The proportion is arbitrary, but a typical partitioning ratio is 80/20 for training/test data. Make sure that you set the seed of random number generator with `set.seed()` otherwise resulting subsets will be different each time.
+
+```{r}
+data(Boston, package="MASS")
+
+# Split data into training set and test set
+set.seed(1234)
+indTrain <- createDataPartition(
+  y = Boston$medv, # response variable
+  p = .8, # percentage of training data
+  list = FALSE # resulted in a vector of indices
+)
+
+training <- Boston[indTrain,] # training set
+test <- Boston[-indTrain,] # test set
+
+
+# create CV folds from training
+num_folds <- 5
+set.seed(1234)
+folds <- createFolds(
+  y = training$medv,
+  k = num_folds,
+  list = TRUE
+)
+```
+
+### CV outputs
+
+```{r}
+# train linear regression
+lm.predict <- list()
+for (i in 1:num_folds){
+  lm.fit <- lm(medv ~ lstat, data = training[-folds[[i]], ])
+  lm.predict[[i]] <- data.frame(
+    medv = training[folds[[i]],]$medv,
+    pred = predict(lm.fit, newdata = training[folds[[i]],])
+  )
+}
+
+
+# train a model for each iteration, the record RMSE
+lm.RMSE <- numeric()
+for (i in 1:num_folds){
+  lm.RMSE[i] <- summarize(lm.predict[[i]], RSE = sqrt(mean((medv - pred)^2))) %>% unlist
+}
+
+lm.RMSE 
+mean(lm.RMSE) # CV RMSE
+
+lm.fit.all  <- lm(medv ~ lstat, data=training) # build using all training data
+predict.all <- data.frame(
+  medv = test$medv,
+  pred = predict(lm.fit.all, newdata = test)
+)
+
+RMSE.all <- predict.all %>% summarize(RSE = sqrt(mean((medv - pred)^2))) %>% unlist
+RMSE.all # test RMSE
+
+```
+
+In the above code, `lm.RMSE` contains 5 RMSE error for each iteration of CV. By taking the average, we see the cross validation RMSE is `r mean(lm.RMSE)`, whereas the true test RMSE is `r RMSE.all`. 

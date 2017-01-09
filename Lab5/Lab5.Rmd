@@ -1,0 +1,111 @@
+---
+title: "Lab 5: Simple linear regression"
+author: "Chang-Hsin Lee"
+date: "October 18, 2016"
+output: 
+  html_document:
+    theme: spacelab
+    toc: yes
+    toc_float: true
+---
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, collapse=TRUE, result="hold")
+```
+
+In this lab, we will learn an important statistical learning method caleed *linear regression*. Although the idea is straightforward, many fancy methods in the field of machine learning like neural network and support vector machines are generalizations of linear regression. A regression problem is a type of *supervised learning* problem, where the goal is to predict a continuous valued response $Y$ from a vector of predictors $X$ by learning their relationship as a function $h$. You may see people call predictor and response by other names depending on the field of study. Here are some commonly used synonyms.
+
+* predictor = independent variable = controlled variable = feature = input variable
+* response = dependent variable = target = output variable
+
+## Simple linear rergression
+
+The simplest parametrized regression method is the simple linear regression, which fits a straight line between a continuous predictor $X$ and the response $Y$. By fitting we mean finding suitable numbers $\beta_{1}$ and $\beta_{2}$ in the linear relationship 
+
+$$ Y \approx \beta_{1} + \beta_{2} X.$$
+
+If we denote the training data by pairs of numbers
+
+$$ (x_1,y_1), \, (x_2,y_2) \, \ldots (x_N,y_N) $$
+
+and the corresponding estimate from linear regression by $\hat{y}_1, \hat{y}_2, \ldots , \hat{y}_N$ obtained from
+
+$$ \hat{y}_i = \beta_1 + \beta_2 \cdot x_i,$$ 
+
+then linear regression seeks $\beta_1, \beta_2$ so that the residual sums of squares (RSS)
+
+$$ \sum\limits_{i=1}^{N} (y_{i} - \hat{y}_i)^{2} $$ 
+
+is minimized. For this reason, $\beta_{1}$ and $\beta_{2}$ are called parameters of the model. In R, linear regression is fitted with the linear model function ```lm()```. Here I will demonstrate with the dataset ```Boston``` from package ```MASS``` following the book [Introduction to Statistical Learning](http://www-bcf.usc.edu/~gareth/ISL/)
+
+```{r}
+library(MASS)
+data(Boston)
+names(Boston)
+```
+
+Let's start with using ```lstat``` as the predictor and ```medv``` as the response. The fitting formula is specified in ```lm()``` with a wiggle ```~``` implying that we are fitting ```y ~ x```.
+```{r}
+fit1 <- lm(medv ~ lstat, data = Boston)
+summary(fit1)
+```
+
+The ```lm()``` function produces a linear fit whose coefficients we can access by calling the object. ```broom``` by David Robinson is a good package to use when we want to extract numbers from the fit. I will clean up the fit object with the ```tidy()``` function.
+
+```{r}
+library(broom)
+coeff.fit1 <- tidy(fit1)
+coeff.fit1
+```
+
+In this case, $\beta_{1}=$ ```r coeff.fit1$estimate[1]``` and $\beta_{2}=$ ```r coeff.fit1$estimate[2]```. Using ggplot2, I can make a plot of this linear fit by either specifying the statistical transformation or by adding a line to the plot:
+```{r, eval=FALSE}
+library(ggplot2)
+# The easy way
+ggplot(Boston, aes(x = lstat, y = medv)) + geom_point() +
+  geom_smooth(method = "lm", se = FALSE)
+```
+```{r}
+# The hard way, but customizable
+ggplot(Boston, aes(x = lstat, y = medv)) + geom_point() +
+  geom_abline(intercept = coeff.fit1$estimate[1], slope = coeff.fit1$estimate[2])
+```
+
+
+## Accuracy of regression
+
+When is a linear regression a good fit? Because linear regression minimizes the sum of squares of errors, two common quantaties related to the quality of fit are the *residual standard error* (RSE) and the $R^{2}$ statistic.
+
+### RSE
+
+The residual standard error (RSE) is defined as
+
+$$ \mbox{RSE} = \sqrt{\dfrac{1}{n-2} \mbox{RSS}} = \sqrt{\dfrac{1}{n-2} \sum\limits_{i=1}^{N} (y_{i} - \hat{y}_i)^{2}}. $$
+
+Note that RSE is an unbiased estimator for variance because of the $n-2$ with 2 degrees of freedom (much like the reason people put $n-1$ in sample variance.) In my example, RSE = ```r fit1 %>% glance %>% select(sigma)```.
+
+
+
+### $R^{2}$
+
+RSE is an absolute measure of the lack of fit in the units of $Y$. Sometimes it is unclear what is a good RSE for the fit. Alternatively, the $R^{2}$ statistic (or coefficient of determination) provides a relative measure of fit between 0 and 1. Another way to understand $R^{2}$ is also understood as *proportion of variance explained*. The formula for $R^{2}$ is
+
+$$ R^{2} = \dfrac{\mbox{TSS} - \mbox{RSS}}{\mbox{TSS}} = 1 - \dfrac{RSS}{TSS}, $$
+
+where $\mbox{TSS} = \sum(\bar{y}_{i} - y)^{2}$ is the *total sums of squares*. An $R^{2}$ close to 1 means a large proportion of variance has been explained by the regression. In fact, in the simple regression setting $R^{2}$ is simply the square of sample coefficient of correlation $\mbox{Cor}(X,Y)$ between $X$ and $Y$:
+
+$$ R^{2} = \mbox{Cor}(X,Y)^{2}.$$
+
+However, the idea of correlation does not extend naturally to the setting of multiple linear regression where there are multiple predictors. In that case, $R^{2}$ still works as a measure of quality of fit. Keep in mind that there is no cut and dried $R^{2}$ value for a "good fit". Depending on the situation, even an $R^{2}$ of 0.2 may be considered good. In our example, $R^{2}$ =```r fit1 %>% glance %>% select(r.squared)```, which in my opinion is pretty good.
+ 
+## p-value
+
+Note that in ```summary(fit1)``` there is a column $\mbox{Pr}(>|t|)$ in the coefficients section. This is the p-value associated with each variable. The p-value for ```lstat``` is less than $2^{-16}$, and the three stars next to it indicates the p-value associated with this predictor is less than 0.001. There is much to say about p-value and the misuse (p-hacking) and misinterpretation in the scientific community associated with the arbitrary level of significance $\alpha =  .05$, but I will leave this to the lecture. Just keep in mind that
+
+* p-value does not measure the size of an effect, and
+* by itself p-value does not provide a good measure of evidence regarding a model or hypothesis.
+
+Never draw conclusions from *only* p-values!
+
+
+

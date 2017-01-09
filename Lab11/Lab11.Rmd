@@ -1,0 +1,108 @@
+---
+title: "Lab 11: Model assessment part 3"
+author: "Chang-Hsin Lee"
+date: "December 5, 2016"
+output: 
+  html_document:
+    theme: spacelab
+    code_folding: show
+    toc: yes
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, collapse=TRUE, result="hold", fig.align="center",  warning=FALSE, message=FALSE)
+```
+
+## Calibration
+
+Is our probability prediction in line with the actual events? For example, let us assume we have a binary classification problem where the response takes value of 0 and 1. If we collect all test observations who are predicted to have 70\% -80\% chance to be 1, does this test group actually have about 75\% of observations with response 1? If the proportion is very different, say only 25\% of observations turned out to be 1, then we probably want to adjust the model because its output may perform terribly as a prediction of probability. 
+
+One way to check the calibration of a model is through the use of *calibration plot*. The x-axis of the plot is the fitted probability on which the data is divided into bins. The proportion of observed probability in each bin is then calculated and plotted as the y variable. The dots are often connected by straight lines to compare with the line of perfect calibration (with slope 1.)
+
+In R it is not difficult to come up with your own calibration plot function with ggplot2 by using `freqpoly()` and `summarize()` in dplyr. But here I will demonstrate with the caret package which follows the basic R syntax instead of ggplot2.
+
+```{r}
+library(caret)
+library(dplyr)
+
+## Preparing data/Preprocessing
+data(mdrr)
+mdrrDescr <- mdrrDescr[, -nearZeroVar(mdrrDescr)] # remove predictors with near zero variance
+mdrrDescr <- mdrrDescr[, -findCorrelation(cor(mdrrDescr), .5)] # remove highly correlated predictors
+
+
+# Create training/test data
+set.seed(123)
+indTrain <- createDataPartition(mdrrClass, p=.5, list=FALSE)
+trainX <- mdrrDescr[indTrain, ]
+testX <- mdrrDescr[-indTrain, ]
+
+training.data <- mutate(
+  trainX, 
+  Label = mdrrClass[indTrain])
+test.data <- mutate(
+  testX, 
+  Label = mdrrClass[-indTrain])
+
+# Create different model fits of LDA and QDA (ignore warning messages)
+trCtrl <- trainControl(
+  classProbs = TRUE
+)
+ldaFit <- train(Label ~ .,
+                data = training.data,
+                method = "lda",
+                trControl = trCtrl)
+qdaFit <- train(Label ~ .,
+                data = training.data,
+                method = "qda",
+                trControl = trCtrl)
+
+# Put observed labels and probability prediction in one data frame
+testProbs <- data.frame(
+  obs = test.data$Label,
+  lda = predict(ldaFit, test.data, type="prob")$Active,
+  qda = predict(qdaFit, test.data, type="prob")$Active
+  )
+
+# Create calibration data
+calibration(obs ~ lda + qda, data = testProbs)
+calPlotData <- calibration(obs ~ lda + qda, data = testProbs)
+calPlotData
+
+# Calibration plot
+xyplot(calPlotData, auto.key = list(columns = 2))
+
+
+```
+
+As seen in the plot, the LDA probability output is better calibrated than the QDA one. As a remark, John Tukey suggested binning binning by halves rather than equally sized: split data into upper and lower halves, then split each half into halves, then split the extreme halves into halves recursively. This will help us inspect the tail behavior of predicted probability without putting too much dots in the middle section where the bulk of data is. However, you'll have to implement this yourself (or refer to this [solution](http://stats.stackexchange.com/questions/25482/visualizing-the-calibration-of-predicted-probability-of-a-model) on StackExchange.)
+
+## Producing Good Graphics
+
+By now you should be comfortable with making a quick exploratory analysis plot with ggplot2. However, they are often ugly and are not quite ready to be used in communication. To produce a plot for your report or presentation, it is essential to consider the following aspects of your plot. Think about the user experience and design your plot accordingly.
+
+- Labels
+- Titles
+- Annotations
+- Axis ticks andlegens
+- Legend layout
+- Color scales
+- Themes
+
+Here is a good reference: [Graphics for Communication](http://r4ds.had.co.nz/graphics-for-communication.html). Also the [Cookbook for R Graphics](http://www.cookbook-r.com/Graphs/) will answer most of the basic graphics questions. Lastly, a very good extension package for ggplot2 themes is [ggthemes](https://github.com/jrnold/ggthemes).
+
+## Useful things to know
+
+Here is a list of things that I would tell you if we have had more time. If you ever encounter a problem in these categories later in your life then you will have keywords to google with.
+
+### Statistical techniques
+- **Time series**: What do we do when the observations are highly correlated? For example, most financial data are of this type. Here is a good free introductory book on this topic: [Forecasting: Principles and Practice](https://www.otexts.org/book/fpp).
+- **Analysis of variance** (ANOVA)
+- **Bootstrapping**: How to estimate a summary statistic of a distribution, say the standard deviation, when we have very few samples (like 10) drawn from the distribution? This is an essential tool in biostatistics.
+- **Multiple imputation**: How to replace the missing values for the purpose of analysis, and how to interpret the results after we replaced them?
+
+### Data/Coding
+
+- **String manipulation**: What if my data contains strings and I need to seperate/extract strings according to a specific pattern? This is often achieved by employing *regular expressions*. Also look up the package `stringr`.
+- **Vectorization of code**: Loops are inefficient in R and nested loops may bottleneck the runtime. Proper vectorization of code (with fuctions in the `apply()` family) can greatly improve the runtime. But don't fall for premature optimization!

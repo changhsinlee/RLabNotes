@@ -1,0 +1,173 @@
+---
+title: "Lab 6: Multiple linear regression"
+author: "Chang-Hsin Lee"
+date: "October 24, 2016"
+output: 
+  html_document:
+    theme: spacelab
+    code_folding: show
+    toc: yes
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, collapse=TRUE, result="hold")
+print.est <- function(x.fit,x.string) {
+  x.fit %>% tidy %>% filter(term == x.string) %>% select(estimate)
+}
+```
+
+
+Lab 5 introduced simple linear regression that predicts a continuous response from single continuous predictor. In this lab, we will build on this idea to see how one can integrate multiple predictors of mixed types into a linear model.
+
+```{r, warning=FALSE, message=FALSE}
+library(ggplot2)
+library(broom)
+library(dplyr)
+```
+
+## Multiple linear regression {#link1}
+
+Let us start by building a linear model with two continuous predictors $X_1, X_2$. In simple linear regression, the regression output form a straight line on the $X-Y$ plane. In multiple linear regression with two continuous variables, a linear model determines a regression plane in the $X_1 - X_2 - Y$ space by finding suitable parameters $\beta_0, \beta_1, \beta_2$ in
+
+$$ Y \approx \beta_0 + \beta_1 X_1 + \beta_2 X_2$$
+
+that minimizes the sum of squared residuals 
+
+$$ \sum\limits_{i=1}^{N} (y_{i} - \hat{y}_i)^{2} $$ 
+
+similar to simple linear regression. Again, the dataset is the `Boston` housing price from the `MASS` package. You can read more about the dataset with `?MASS::Boston`. In R, a multiple linear regression is also performed with `lm()` but with a different formula, where each predictor used in the fitting process has to be specified and connected by a `+` in between. For example, `medv ~ rm + lstat` instructs R to fit the response `medv` with predictors `rm` and `lstat`.
+
+```{r}
+data(Boston, package="MASS")
+lm.fit <- lm(medv ~ rm + lstat, data = Boston)
+summary(lm.fit)
+```
+
+The fitted model is thus
+
+$$ \mbox{medv} \approx (`r lm.fit %>% print.est("(Intercept)")`) 
+  + (`r lm.fit %>% print.est("rm")`)(\mbox{rm}) 
+  + (`r lm.fit %>% print.est("lstat")`)(\mbox{lstat}) $$
+
+Because ggplot2 only makes 2-D plots, I can't show you what the fitted plane looks like in ggplot2 but it is possible to make one with the package `plotly`. The standard diagnostic chart used in evaluating the performance of a multivariable model is the residual plot which plots residuals against predicted values. (The notation in Homework 5 was wrong, SORRY!) The residuals of can be accessed easily using `augment()` function from the `broom` package. It returns a data frame with computes predicted value in `.fitted`, residual in `.resid`, and standardized residual in `.std.resid`. Here I will make a standardized residual plot where the standard devition of residuals is used as the unit of y-axis. A smooth line is also fitted to the residuals.  
+
+```{r} 
+names(lm.fit %>% augment)
+lm.fit %>% augment %>% ggplot(aes(x=.fitted, y=.std.resid)) + geom_point() + 
+  geom_hline(yintercept=0) + geom_smooth(se=FALSE)
+```
+
+This plot suggests a nonlinear trend in the residual and our model has some room of improvement. I will come back to this issue later.
+
+## Categorical predictors
+
+So far, we have only plugged continuous predictors into linear regression. What if our predictors are categorical? The good news is linear regression in R handles categorical variable automatically by introducing *dummy variables* when we make a little modification to our data. The example here is the binary variable `chas` in `Boston` which takes only the value of 0 or 1. The important step to remember is all categorical variables must be transformed into *factors* in R before it can appropriately used by `lm()`.
+
+```{r}
+Boston2 <- Boston %>% mutate(chas = factor(chas)) # important step
+
+# Note the difference in object type between chas in the Boston and Boston2
+str(Boston$chas)
+str(Boston2$chas)
+
+# Must fit with the factor object type, not numeric
+lm.fit2 <- lm(medv ~ lstat + chas, data = Boston2)
+summary(lm.fit2)
+```
+
+Because 
+
+$$ \mbox{chas} = \begin{cases} 
+  1, \;  & \mbox{if tract bounds river} \\ 
+  0, \;  & \mbox{otherwise,}
+  \end{cases} $$
+
+from the summary we see the fitted model is 
+
+$$ \mbox{medv} \approx (`r lm.fit2 %>% print.est("(Intercept)")`) 
+  + (`r lm.fit2 %>% print.est("lstat")`)(\mbox{lstat}) 
+  + (`r lm.fit2 %>% print.est("chas1")`)(\mbox{chas}) $$
+
+
+In general, when a categorical predictor contains multiple levels, R creates a binary dummy variable taking a value of 0 or 1 for each additional level. So if a categorical predictor has 6 levels, there will be 5 dummy variables in the fitted model. The effect of a dummy variable as shown here is an adjustment to the intercept of regression line by the categories.
+
+```{r}
+Boston2.p <- bind_cols(Boston2, lm.fit2 %>% augment %>% select(.fitted))
+ggplot(Boston2.p, aes(x=lstat, y=medv, color=chas)) + geom_point(alpha=.4) + 
+  geom_smooth(aes(y=.fitted), method="lm", fullrange=TRUE)
+```
+
+## Extensions
+
+Linear regression has several natural extensions that may boost prediction accuracy. The extensions discussed here involve creating new variables from existing ones by introducing nonlinear terms into the approximation, either by combining different predictors or by including powers of a predictor.
+
+### Interaction
+
+In the multiple linear regression setting, the change in response against a predictor per unit is independent of other predictors. In the real world however, there could be certain relationships between the predictors that adjust their effect on the response. One way to address this relationship is by including an interaction term in the linear model. For example, if we want to predict price of a house by the frontage and depth of its lot, then the linear model `price ~ frontage + depth` will probably yield terrible result. However, adding an interaction term `frontage:depth` should greatly improve the model accuracy because housing price is highly correlated with lot area. In R, an interaction between variables `x1` and `x2` is specified by `x1:x2`. The shorthand notation `x1*x2` means `x1 + x2 + x1:x2`
+
+```{r}
+lm.fit.int <- lm(medv ~ lstat + age + lstat:age, data = Boston)
+lm.fit.int2 <- lm(medv ~ lstat * age, data = Boston) # Shorthand
+summary(lm.fit.int) #lm.fit.interaction2 gives the same result
+```
+
+$$ \mbox{medv} \approx (`r lm.fit.int %>% print.est("(Intercept)")`) 
+  + (`r lm.fit.int %>% print.est("lstat")`)(\mbox{lstat}) 
+  + (`r lm.fit.int %>% print.est("age")`)(\mbox{age})
+  + (`r lm.fit.int %>% print.est("lstat:age")`)(\mbox{lstat} * \mbox{age}) $$
+
+The terms `lstat` and `age` are called *main effects* and `lstat:age` their *interaction*. Notice that `age` is not statistically significant with a p-value of 0.97. However, because `lstat:age` is significant, statisticians still keep `age` as a predictor in the formula by the *hierarchical principle*. 
+
+### Polynomial regression
+
+Another common extension of linear regression is the *polynomial regression*, where the relationship between response $Y$ and predictor $X$ is modeled by as a $n$-th degree polynomial
+
+$$ Y \approx \beta_0 + \beta_1 X + \beta_2 x^{2} + \ldots + \beta_n X^{n}.$$
+
+In the following example, I fitted `medv` with a degree 3 polynomial of `lstat`. The `I()` wrapped around `lstat` is necessary because the `^` is a reserved symbol in R formula.
+
+```{r}
+lm.fit.poly2 <- lm(medv ~ lstat + I(lstat^2) + I(lstat^3), data = Boston) # deg 3 poly. fit
+summary(lm.fit.poly2)
+```
+
+Therefore the model says
+
+$$ \mbox{medv} \approx (`r lm.fit.poly2 %>% print.est("(Intercept)")`) 
+  + (`r lm.fit.poly2 %>% print.est("lstat")`)(\mbox{lstat}) 
+  + (`r lm.fit.poly2 %>% print.est("I(lstat^2)")`)(\mbox{lstat})^{2}
+  + (`r lm.fit.poly2 %>% print.est("I(lstat^3)")`)(\mbox{lstat})^{3}. $$
+
+
+```{r}
+ggplot(Boston, aes(x = lstat, y = medv)) + geom_point() + 
+  geom_smooth(method = "lm", se = FALSE, formula = y ~ poly(x, 3))
+```
+
+Compared to result of simple linear regression using the same predictor, one can argue that polynomial regression generated a better fit. There is no reason to restrict us only to $n=3$. To include higher order terms, it is easier to specify the degree of a polynomial with the `poly()` function in the formula.
+
+```{r,eval=FALSE}
+lm.fit.poly9 <- lm(medv ~ poly(lstat, 9)) # deg 9 poly. fit
+```
+
+## Common problems
+
+Many problems may arise in the process of fitting a linear model. This is a well-documented topic that I simply do not have enough time to explain in detail. The *residual plot* is often used as a guide to discover underlying problems in the fitting process. Common problems associated with linear regression include:
+
+* nonlinearity of data,
+* non-constant variance of error (heteroscedasticity,)
+* outliers, and
+* collinearity.
+
+In the first section, we see there is a nonlinear [trend](#link1) in the residual plot when fitted with `rm` and `lstat`. This suggests including nonlinear terms in the model may improve accuracy of prediction. In fact, by including up to 3rd order terms of `lstat` in the model, we get a much nicer residual plot.
+
+```{r}
+lm.fit.new <- lm(medv ~ rm + poly(lstat,3), data = Boston)
+lm.fit.new %>% augment %>% ggplot(aes(x=.fitted, y=.std.resid)) + geom_point() + 
+  geom_hline(yintercept=0) + geom_smooth(se=FALSE)
+```
+
+For reference, I highly recommend reading section 3.3.3 of *Introduction to Statistical Learning*, whose e-book can be downloaded free of charge from [here](http://www-bcf.usc.edu/~gareth/ISL/). It tells you what these problems are and provides common strategies in attacking such problems.
+
+

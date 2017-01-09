@@ -1,0 +1,145 @@
+---
+title: "Lab 10: Model assessment part 2"
+author: "Chang-Hsin Lee"
+date: "November 29, 2016"
+output: 
+  html_document:
+    theme: spacelab
+    code_folding: show
+    toc: yes
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, collapse=TRUE, result="hold", fig.align="center",  warning=FALSE, message=FALSE)
+```
+
+## CV for classification
+
+In training a logistic regression model, the parameters are selected to minimize the logistic loss (or log-loss). For each sample, the log-loss defined as the negative of log-likelihood:
+
+$$ -\left[ y_\mbox{true}  \log{ y_\mbox{pred} }  + \left( 1 - y_\mbox{true} \right) \log{ \left( 1- y_\mbox{pred} \right) }  \right]$$
+
+and the log-loss of a prediction is calculated by the average of log-loss over all samples. For example, if we have the following data of 2 samples and predictions from a model,
+
+```{r table2, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+options(digits = 2)
+tab1 <- "
+| sample | y_true | y_pred |
+|--------|--------|--------|
+| 1      | 1      | .8     |
+| 2      | 0      | .3     |
+"
+cat(tab1)
+```
+
+then the log-loss corresponding to the first and second sample are, respectively, 
+$$ - \left[ (1)(\log{(.8)}) + (1-1)(\log{(1-0.8)}) \right] = -\log{(0.8)} $$
+
+and
+
+$$ - \left[ (0)(\log{(.3)}) + (1-0)(\log{(1-0.3)}) \right] = -\log{(0.7)}. $$
+
+Therefore the total log-loss is $\dfrac{1}{2} \cdot (-\log{(0.8)} -\log{(0.7))}$ = `r 0.5*(-(log(.8) + log(.7)))`
+
+## Model selection with caret
+
+caret has an option to use log-loss as performance measure in cross-validation. As an example, let us go back to the `PimaIndiansDiabetes` dataset. The default measure in caret for classification is `Kappa`. To change it to log-loss, three arguments must be specified:
+
+* `classProbs = TRUE` tells caret to return class probability instead of raw prediction
+* `summaryFunction = mnLogLoss` tells caret to use log-loss summary function
+* `metric = "logLoss"` means caret will select the model having the lowest log-loss.
+
+The `trainControl` part in the `train` function is a convenient wrapper that can be recycled when training multiple models.
+
+```{r}
+library(caret)
+library(mlbench)
+data(PimaIndiansDiabetes)
+pid <- PimaIndiansDiabetes
+str(pid)
+
+# split into training and test data
+set.seed(123)
+trainIndex = createDataPartition(pid$diabetes,
+                                 p = .8,
+                                 list = FALSE)
+train <- pid[trainIndex,]
+test <- pid[-trainIndex,]
+
+
+# set training control parameters for caret
+set.seed(321)
+fitControl <- trainControl(
+  method = "cv",
+  number = 5,
+  # make caret use log-loss
+  classProbs = TRUE,  # output class probability
+  summaryFunction = mnLogLoss  # set metric to log-loss
+)
+
+# training model with caret
+logreg.model <-  train(diabetes ~ .,
+              data = train,
+              method = "glm",
+              family = binomial,
+              trControl = fitControl,
+              metric = "logLoss")  # use log-loss as metric
+
+logreg.model
+```
+
+### Fancier models
+
+The reason why I suggest using caret for model selection is the following. Although we have only seen a handful of models for regression and classification problems so far, in the real world people actually have a myriad of possible models to choose from in the early stage of a project. It is time consuming to read through the documents of each model and code accordingly so that one can compare all the models with a single selection criteria (like log-loss). In the exploratory stage, it is a good practice to try many different models (say 10-20) without worrying about fine tuning the parameters, then zoom in to two or three that are performing well, and finally perform a grid search on the parameters of each model to pick the best model. We can simplify this process in caret because of its consistency in syntax and interface for model training. For example, if we want to train a KNN model instead,
+
+```{r}
+knn.model <-  train(diabetes ~ .,
+              data = train,
+              method = "knn", # K nearest neighbor
+              trControl = fitControl,
+              metric = "logLoss")  # use log-loss as metric
+
+knn.model
+```
+
+Here is the [complete list of models](https://topepo.github.io/caret/available-models.html) that caret supports and the [corresponding parameters](https://topepo.github.io/caret/train-models-by-tag.html) for each model. As an example, we can train a single-layer neural network:
+
+```{r, results="hide"}
+nn.model <-  train(diabetes ~ .,
+              data = train,
+              method = "nnet",
+              trControl = fitControl,
+              metric = "logLoss" # use log-loss as metric
+              )
+```
+
+According to the model list page for caret, we see that single-layer neural network has two parameters, weight decay `decay` and number of hidden units `size`. caret initialized a quick grid search and selected the best choice of parameters for us.
+
+```{r, eval=FALSE}
+
+nn.model <- train(diabetes ~ .,
+              data = train,
+              method = "nnet",
+              trControl = fitControl,
+              metric = "logLoss" # use log-loss as metric
+              )
+```
+
+You should try some fancier models yourself, even if you don't understand the math behind it! In addition, to set up your own grid, you can do something like
+```{r, results = "hide"}
+my.own.grid <- expand.grid(size=c(3,10), decay=c(0,10^(-1)))
+nn.model2 <- nn.model <- train(diabetes ~ .,
+              data = train,
+              method = "nnet",
+              trControl = fitControl,
+              metric = "logLoss", # use log-loss as metric
+              tuneGrid = my.own.grid # using custom grid
+              )
+```
+```{r}
+nn.model2
+```
+
+## Calibration
+In a classification problem, calibration is probably the most useful diagnostic, especially when the model is complicated. I will show you what calibration means and how to implement it in the last lab session.

@@ -1,0 +1,169 @@
+---
+title: "Lab 7: Classificiation"
+author: "Chang-Hsin Lee"
+date: "November 1, 2016"
+output: 
+  html_document:
+    theme: spacelab
+    code_folding: show
+    toc: yes
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, collapse=TRUE, result="hold", fig.height=4, fig.width=6, fig.align="center")
+```
+
+Supervised learning problem can be divided into two sets of subproblems depending on whether the type of response: regression and classification. We have covered the basics of linear regression as one of the fundamental methods in regression analysis. In this lab I will show you an essential tool in classifications: the logistic regression. 
+
+The goal of classification is to put each observation based on their features $X=(X_1,X_2,..,X_N)$ into one of the categories in $Y$. For example, we can use a classification model to
+
+* Classify hand-written digits and alphabets.
+* Identify fraudulent credit card transactions.
+* Filter email spams.
+
+The main difference in having a categorical response $Y$ is that there may be no meaning between the categories or numbers used to represent categories of $Y$. The type 1 diabete is not "less" or "half" in any way than the type 2 diabete. Despite the fact that the response $Y$ may not even take value in numbers, most classification algorithm actually generate a set of numbers between 0 and 1 to represent the probabilities of an observation belonging to each class in $Y$. The user then build a classifier on the basis of probability outcomes.
+
+Generally, a user cares more about the probability output than the actual classifier because one can almost never classify with 100\% certainty. Consider presidential election predictions. A prediction model that shows the public how likely each candidate will win Florida is more useful and credible than a model that produces black and white answer with 100\% certainty saying who will win Florida. The amount of variance in real world problems that can't be explained completely by the variables is too much. Two identical observations always produce identical prediction in the model, but the actual result may vary in practice.
+
+However, things are slightly different if we can easily replicate the samples. Natural language processing (NLP) is a subfield in machine learning that analyzes human language with computer language. In voice recognition, it is easy to collect hundreds of thousands of samples of a user saying a particular word, like "dog". In this case, much is known about English grammar and pronounciation, so it is possible to create an extremely accurate classifer to identify all the "dogs" came up in a conversation. The takeway is that the definition of a classification model being "good" depends on the problem. Picking a right model for the problem is as much an art as science.
+
+## Logistic regression
+
+A basic algorithm for classification problems is the logistic regression. Despite being called logistic regression for historical reasons, it is a classification method and *not* a regression method. Other than having a different type of response $Y$, it also has a different cost function than linear regression. The dataset I will use here is the Pima Indians Diabetes dataset from the [UCI Machine Learning Repository](https://archive.ics.uci.edu/ml/datasets/Pima+Indians+Diabetes). You can access the data by installing the package `mlbench`
+
+```{r, warning=FALSE, message=FALSE}
+library(ggplot2)
+library(broom)
+library(dplyr)
+# install.packages("mlbench")
+library(mlbench)
+data(PimaIndiansDiabetes)
+```
+
+This dataset contains 768 observations on 8 features, where the response $Y$ will be the categorical variable `diabetes` on two levels `pos` or `neg`. 
+
+### Algorithm
+
+Logistic regression is a binary classification method whose output is always a number between 0 and 1. Traditionally people use 1 to represent the "positive" class and 0 to represent the "negative" class. If I have an observation $X = (X_1, X_2, ... X_n)$, I can construct a linear model by writing a linear function
+
+$$ f(X) =  \beta_0 + \beta_1 X_1 + ... + \beta_n X_n.$$
+
+However, the range of linear function $f$ can go way outside of $[0,1]$ so it is not qualified to be a proper probability. One way to amend is to transform the range by composing $f$ with the *logistic function*. The logistic function is given by
+
+$$ \sigma (t) = \dfrac{1}{1 + e^{-t}} = \dfrac{e^t}{1+e^t}, $$
+
+which is a smooth increasing function on $[-\infty,\infty]$ with minimum 0 and maximum 1, as shown in the following figure. 
+
+```{r, echo=FALSE, fig.height=4, fig.width=6, fig.align="center"}
+library(latex2exp)
+data.frame(
+  x = seq(-10,10,.1)
+) %>% ggplot(aes(x=x,y=plogis(x))) + geom_line() + xlab("t") +
+  ylab(TeX("$\\sigma(t)$")) + ggtitle(TeX("Plot of logistic function $\\sigma$"))
+```
+
+So composing $\sigma$ with $f$ gives us the formula for logistic regression:
+
+$$ p(X) := \sigma( f(X)) = \dfrac{e^{\beta_0 + \beta_1 X_1 + ... + \beta_n}}{1+e^{\beta_0 + \beta_1 X_1 + ... + \beta_n X_n}}. $$
+
+We can rewrite the formula to get the following. 
+
+$$ \log{\left( \dfrac{p}{1-p} \right)} = \beta_0 + \beta_1 X_1 + ... + \beta_n X_n. $$
+
+The left-hand side is called the *log-odds* or *logit*. Therefore logistic regression models the log-odds of an event as a linear combination of variables. As we can see, the output of logistic regression is not class labels but a number between 0,1. To build a classifier, we will have to determine a threshold probability like 0.5 to assign the observations to classes.
+
+### Optional stuff
+
+The goal of the learning process is to estimate the parameters $\beta_1, \beta_2, ..., \beta_n$ presented in the linear model. In the case of linear regression, minimizing sums of squares of errors turned out to also produce *maximum likelihood estimates* (MLE) of the parameters. MLE is a [common technique](http://stats.stackexchange.com/questions/112451/maximum-likelihood-estimation-mle-in-layman-terms) in statistics which you may see in the lecture near the end of semester. To get maximum likelihood estimates of $\beta_i$ in logistic regression, one need to maximize the likelihood function, or equivalently maximize the *log-likelihood function*. Since we will be using R packages to compute the model, I will skip detail in the parameter estimation process, but it is a worthwhile topic to learn if you are interested in statistical inference.
+
+
+### Implementation
+
+In R, logistic regression is performed by passing the `family = binomial` argument through the `glm()` function. **Don't forget `family = binomial`** since logistic regression is only one of many generalized linear methods within `glm()`. To get probability outputs from logistic regression model, one has to specify `type = "response"` within the `predict()` function. `contrast()` is a handy function to check how the model codes the response `diabetes` into a dummy variable because `summary()` is not helpful in this respect.
+
+```{r}
+pid <- PimaIndiansDiabetes
+glm.fit <- glm(diabetes ~ glucose, data = pid, family = binomial) # Fit model
+summary(glm.fit)
+
+glucose.prob <- predict(glm.fit, type = "response") # Get probability output
+contrasts(pid$diabetes) # show dummy variable
+
+glucose.pred <- ifelse(glucose.prob > .5, "p.pos", "p.neg") # Build classifier
+table(glucose.pred, pid$diabetes)
+
+```
+
+So $\beta_0$ = `r tidy(glm.fit)$estimate[1]` and $\beta_1$ = `r tidy(glm.fit)$estimate[2]`. If one of the observation has glucose concentration of 150, the probability of having diabete according to the formula is $\dfrac{1}{1+ e^{-(5.35 + 0.04 \cdot 150 )}}$ = `r 1/(1+ exp(-tidy(glm.fit)$estimate[1] - tidy(glm.fit)$estimate[2]*150))`. The classifier then labels this observation "positive" according to the threshold probability 0.5.
+
+We can plot the logistic regression fit but it is not very informative. Note that it is necessary to coerce the factor variable `diabetes` into a numeric between 0 and 1 to be compatible with ggplot2.
+
+```{r, fig.width=6, fig.height=4, fig.align="center"}
+pid %>% ggplot(aes(x=glucose, y=as.numeric(diabetes)-1)) + geom_jitter(height = .05, alpha=.2) + geom_smooth(method = "glm", method.args = list(family = "binomial"))
+```
+
+In using `iflese()`, I picked 0.5 as the threshold so every observation with a predicted probability greater than 0.5 will be assigned to the "positive" class and "negative" otherwise. There is no reason to always choose 0.5 as the threshold probability. Depending on the problem, one might want to pick a different number to minimize false positive rate or false negative rate. I will say more in the next section.
+
+## Classification error
+
+The linear regression uses sums of squares of error as the cost function, and the RSE and $R^2$ are natural choices of performance metric assisted by residual plot for diagnostics. Such metrics does not carry over to logistic regression when we have a different cost function. A good way to compare logistic regression models and their probability outputs is using the log-loss, much like RSE for linear regressions. In addition, there are also various classification error rates that may help us choose a cutoff probability to build a suitable classifier.
+
+### True positive/negative rate
+
+There are two kinds of errors a classifier can commit: false positives and false negatives (analogous to type I and type II errors in hypothesis testing, but not the same.) Imagine the following setup, where we want to test a medical screeing procedure on a group of 1,000 patients where 100 of them has the disease we are testing for . The procedure then flagged 120 positives where only 60 patients out of the 120 actually have such disease. We can orgazine the result in a *confusion matrix*.
+
+```{r table2, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+options(digits = 2)
+tab1 <- "
+|                    | True positive | True negative |
+|--------------------|---------------|---------------|
+| Predicted positive | 60            | 60            |
+| Predicted negative | 40            | 840           |
+"
+
+cat(tab1)
+```
+
+In such a case, I can compute the associated classification error rates
+
+* true positive rate = 60/(40+60) = `r 100*60/100`\%
+* true negative rate = 840/(60+840) = `r 100*840/900`\%
+* false positive rate = 60/(60+840) = `r 100*60/900`\%
+* false negative rate = 40/(40+60) = `r 100*40/100`\%
+* accuracy = (60+840)/1000 = `r 100*(60+840)/1000`\%
+
+At first glance, it appears that 90\% is a pretty good accuracy. This is a misleading conclusion closely related to the [base rate fallacy](https://en.wikipedia.org/wiki/Base_rate_fallacy), a concept I will come back to later. In fact, if we label all the observations as "negative", then the only wrong predictions will be from the 100 positives and the accuracy from random guessing is also exactly 100/1000 = 90\%!
+
+Therefore, having either a low accuracy, low true positive rate, or low true negative rate does not mean you have a bad model! Keep in mind that your data may contain many observations that looked alike which cause the classification error rates to be high no matter what you do. It is part of the *irreducible error* in the data. In the statistics language, one can never get an error rate lower than the *Bayes error rate*. 
+
+Instead of trying to get a model with the lowest error rate, one should focus on what kind of model will be more useful given the resource and the consequences (or risks) associated with false positives and false negatives. For example, airport security can afford thousands of false positives a day to eliminate any potential false negative (like a bomb). On the other hand, spam filters are designed to achieve a close to zero false positive rate to prevent a legitimate email being marked as spam. 
+
+### ROC curve
+
+This is the confusion matrix from the above Pima Indians Diabetes model when I picked a cutoff probability of 0.5 for the logistic regression classifier:
+
+```{r}
+table(glucose.pred, pid$diabetes)
+```
+
+* true positive rate = 130/(130+138) = `r 100*130/(130+138)`\%
+* false postive rate = 57/(57+443) = `r 100*57/(57+443)`\%
+
+An ideal classifier achieves a high true positive rate and a low false positive rate at the same time. However, theses two rates tend to go up or go down together depending on the threshold probability. This trade-off between maximizing true positive rate and minimizing false positive rate can be demonstrated by a *receiver operating characteristic curve* (ROC curve). A classifier based on complete random guess will produce a diagonal line going through the origin with slope 1. In general, the farther away from the diagonal line the better the ROC curve.
+
+One way to make an ROC plot is using an extension of ggplot2 that plots ROC curve called `plotROC`. To use the `geom_roc()` function, in the plotting aesthetics one should feed `d` with the actual label and `m` with the probability output instead of the common aesthetics `x` and `y`. The diagonal line added with `geom_abline()` is only for reference and is optional.
+
+```{r}
+# install.packages("plotROC")
+library(plotROC)
+
+ROC.data <- data.frame(
+  D = as.numeric(pid$diabetes)-1,
+  M = glucose.prob
+)
+
+# making ROC plot
+ROC.data %>% ggplot(aes(d=D, m=M)) + geom_roc() + geom_abline(slope=1, alpha=.4) +
+  ggtitle("ROC curve")
+```
