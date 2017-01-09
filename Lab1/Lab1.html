@@ -233,7 +233,7 @@ div.tocify {
 
 <h1 class="title toc-ignore">Lab 1: Data Visualization</h1>
 <h4 class="author"><em>Chang-Hsin Lee</em></h4>
-<h4 class="date"><em>Last modified on January 7, 2017</em></h4>
+<h4 class="date"><em>Last modified on January 9, 2017</em></h4>
 
 </div>
 
@@ -366,14 +366,15 @@ ggplot(data = (diamonds %&gt;% filter(color %in% c(&quot;D&quot;,&quot;J&quot;))
 <li>Try the following command:</li>
 </ol>
 <p><code>ggplot(data=diamonds,</code></p>
-<p>You will see a <code>+</code> in console calling for input, which means you have put in an incomplete command and R is waiting for you to finish. To leave the prompt, press ESCAPE on your</p>
+<p>You will see a <code>+</code> in console calling for input, which means you have put in an incomplete command and R is waiting for you to finish. To leave the prompt, press ESCAPE on your keyboard.</p>
+<ol start="2" style="list-style-type: decimal">
+<li><p>When you break up a ggplot2 command into several lines, the <code>+</code> operator has to be placed at the end of a line or you will get an error. (Same rule applies for the piping operator <code>%&gt;%</code> from dplyr which we will talk about later)</p>
 <pre class="r"><code>ggplot(data=diamonds, aes(x=carat, y=price)) + 
   geom_point() # working
 
 ggplot(data=diamonds, aes(x=carat, y=price)) 
-  + geom_point() # not working</code></pre>
-<ol start="3" style="list-style-type: decimal">
-<li><code>?</code> calls the help file for a function. For example, to look up what <code>mean()</code> does, you can type <code>?mean</code> in the console. <code>?</code> is your good friend so abuse it often. <code>??</code> is similar but searches all functions with a matching name in all installed packages. Try <code>??geom</code>.</li>
+  + geom_point() # not working</code></pre></li>
+<li><p><code>?</code> calls the help file for a function. For example, to look up what <code>mean()</code> does, you can type <code>?mean</code> in the console. <code>?</code> is your good friend so abuse it often. <code>??</code> is similar but searches all functions with a matching name in all installed packages. Try <code>??geom</code>.</p></li>
 </ol>
 <!--- we first specified which data frame to use and where the attributes should map to (the aesthetics) by ```ggplot(data=diamonds, aes(x=carat, y=price))```, then choose the geometric object to use by ```geom_point()```, connected by a ```+```.
 

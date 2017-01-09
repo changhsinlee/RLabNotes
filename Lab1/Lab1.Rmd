@@ -1,7 +1,7 @@
 ---
 title: "Lab 1: Data Visualization"
 author: "Chang-Hsin Lee"
-date: Last modified on January 7, 2017
+date: Last modified on January 9, 2017
 output: 
   html_document:
     theme: spacelab
@@ -157,8 +157,11 @@ There are some things in R programming that took me a while to figure out . I wi
 
 `ggplot(data=diamonds, `
 
-You will see a `+` in console calling for input, which means you have put in an incomplete command and R is waiting for you to finish. To leave the prompt, press ESCAPE on your 
-```{r, eval=FALSE}
+You will see a `+` in console calling for input, which means you have put in an incomplete command and R is waiting for you to finish. To leave the prompt, press ESCAPE on your keyboard.
+
+2. When you break up a ggplot2 command into several lines, the `+` operator has to be placed at the end of a line or you will get an error. (Same rule applies for the piping operator `%>%` from dplyr which we will talk about later)
+
+```{r, eval=FALSE, indent="    "}
 ggplot(data=diamonds, aes(x=carat, y=price)) + 
   geom_point() # working
 
