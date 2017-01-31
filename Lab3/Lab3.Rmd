@@ -1,7 +1,7 @@
 ---
 title: "Lab 3: Data Transformation"
 author: "Chang-Hsin Lee"
-date: "September 20, 2016. Last modified Sep. 26, 2016"
+date: "September 20, 2016. Last modified January 31, 2017"
 output: 
   html_document:
     theme: spacelab
@@ -13,68 +13,70 @@ output:
 knitr::opts_chunk$set(echo = TRUE, collapse=TRUE, result="hold")
 ```
 
-In this Lab I will show you another popular R package by Hadley Wickham: dplyr, that has greatly improved the workflow of R programming.
+In this Lab I will show you another popular R package by Hadley Wickham: dplyr, that has greatly improved the workflow of R programming in the last few years. 
 
 ## R package: dplyr
 
 ```{r, warning=FALSE, message=FALSE}
-library(ggplot2)
 library(dplyr)
 ```
 
-dplyr is a data transformation package developed by Hadley Wickham to make everyday data wrangling tasks more readable and efficient. There is another data transformation package, data.table that is even faster and more versatile than dplyr, but takes considerably more time to learn. So I will be teaching you dplyr only. If your data is less than a few gigabytes, the speed gain from using data.table is insignificant compared to dplyr.
+dplyr is a data transformation package developed by Hadley Wickham to make everyday data wrangling tasks more efficient and more readable. There is another data transformation package, data.table, that provides a faster runtime and even more versatile than dplyr, but takes considerably more effort to learn, so I will be showing dplyr only. If your data takes up less than a few gigabytes, the speed gain from using data.table is insignificant compared to dplyr.
 
-There are five key verbs in the dplyr world that you will be familiar with:
+There are five key verbs in the dplyr:
 
-* Pick observations by values with ```filter()```
-* Reorder the rows by ```arrange()```
-* Pick variables by names with ```select()```
-* Create new variables from existing ones with ```mutate()```
-* Collapse many values into a new summary variable with ```summarize()```
+* Pick variables by names with `select()`
+* Pick observations by values with `filter()`
+* Reorder the rows by `arrange()`
+* Create new variables from existing ones with `mutate()`
+* Collapse many values into a new summary variable with `summarize()`
 
-(Hadley Wickham is from New Zealand where people prefer British English. If you like, you can use ```summarise()``` instead of ```summarize()```.)
+(Hadley Wickham is from New Zealand so he uses `summarise()` instead of `summarize()`.)
 
 ## Data: NBA shot logs
 
-The dataset that I use to demonstrate here is the [NBA shot logs](https://www.kaggle.com/dansbecker/nba-shot-logs) from Kaggle. It contains a partial shooting data in the 2014-15 season. You can download the latest version from Kaggle or the one I put on Blackboard. 
+The dataset that I am demonstrating here is the [NBA shot logs](https://www.kaggle.com/dansbecker/nba-shot-logs) from Kaggle. It contains a partial basketball shooting data in the NBA 2014-15 season. You can download the latest version from Kaggle or use the one I put on Blackboard. 
 
 ```{r}
 nba.shots <- read.csv("shot_logs.csv", stringsAsFactors=FALSE)
-str(nba.shots)
+glimpse(nba.shots)
 ```
 
-This dataset contains a lot of observations (128069) and variables (21). It will require quite a bit of trimming if I ever want to do any kind of analysis on the data. Let's say that I want to compare shooting metrics of two players, Kobe Bryant and James Harden. In particular, I want to list for each game, their ```POINTS``` per ```TOUCH_TIME```, then arrange the result in a descending order to find their most efficient game shooting performance during 14-15 season.
+This dataset contains a lot of observations (128069) and variables (21), but I will use only a subset of the data. Let's say that I want to compare shooting metrics of two players, Kobe Bryant and James Harden. In particular, I want to list for each game, their `POINTS` per `TOUCH_TIME`, then arrange the result in a descending order to find their most efficient game shooting performance during 14-15 season.
 
 ## select()
 
-For starters, there are too many variables in the basketall data and most of which I do not need to build my list. Sometimes the dataset at hand will contain hundreds or thousands of variables. When only a few variables are relevant to analysis, ```select()``` can quickly pick out the variables you want and keep a useful subset to the original data.
+There are many variables in the basketall data and most of which I do not need to in comparing points per touch time. Sometimes the dataset will contain thousands of variables which with only a handful that are relevant to analysis. In this case, `select()` can quickly subset the variables you want to use in analysis. An easy way to remember is `select()` makes vertical slices on data.
+
+![concept of select(): from dplyr cheatsheet by Rstudio](select.png)
 
 ```{r}
-data.nba <- select(nba.shots, GAME_ID, player_name, MATCHUP, PERIOD, SHOT_NUMBER, TOUCH_TIME, PTS)
-str(data.nba)
+data.nba <- select(nba.shots, GAME_ID, player_name, MATCHUP, PERIOD, SHOT_NUMBER, TOUCH_TIME, PTS) # take only relevant columns
+glimpse(data.nba)
 ```
 
 ## filter()
 
-You can think of ```select()``` as slicing vertically on your data. How do we make horizontal slices? Because each row in the data frame represen an observation, horizontal slices means we are finding a subset of observations based on some filtering criteria. In dplyr, such filtering is acheived by ```filter()```. Here I only keep data of two players, Kobe Bryant and James Harden, by filtering on ```player_name```.
+While `select()` makes vertical slices on data, `filter()` makes horizontal slices. How does R know which slices to take? Because each row in the data frame represents an observation, making horizontal slices means we are finding a subset of observations based on some filtering criteria. This is what `filter()` does. Here I keep only shot logs of two players, Kobe Bryant and James Harden by filtering on `player_name`. (The `%in` operator is a shorthand of `match()` that returns a logical vector and is `TRUE` when the vector on left mathces any of the value on the right. See `?match` for more information.)
 
+![concept of filter(): from dplyr cheatsheet by Rstudio](filter.png)
 
 ```{r}
 data.nba <- filter(data.nba, player_name %in% c("kobe bryant","james harden"))
 glimpse(data.nba)
 ```
 
-If you need to combine several filtering statemetns, you can use logical operators. Please google "r logical operators" to learn more on how to write logical statements in R. The most common ones are
+By using logical operators in R, you can combine several filtering statements into one. Please google "r logical operators" to learn more on how to write more complicated logical statements in R. The most common ones are
 
 * & : AND
 * | : OR
 * ! : NOT
 
-For example, we can keep only shots in the 3rd and 4th quarters.
+For example, we can keep only shots made by Kobe and James only in the 3rd and 4th quarters.
 ```{r}
 data.nba.filter <- filter(nba.shots, 
                           player_name %in% c("kobe bryant","james harden") & (PERIOD == 3 | PERIOD == 4))
-# Alternative
+# Alternatively
 data.nba.filter <- filter(nba.shots, 
                           player_name %in% c("kobe bryant","james harden") & PERIOD >= 3)
 
@@ -83,6 +85,8 @@ data.nba.filter <- filter(nba.shots,
 ## mutate()
 
 I have showed two functions for data trimming. What if I want to add more columns to the data? It is done with ```mutate()```, which creates new columns from existing columns. Here, I would like to know the total ```TOUCH_TIME``` each player has accumulated in game when they made the shot. If I want to use an aggregate function that sums entries cumulatively, I can't use it on the whole dataset, because that will aggregate all shots in the season. Insead, I need to group the data by game and by player to make sure the computation is only carried out within each group and not the whole season. 
+
+![concept of mutate(): from dplyr cheatsheet by Rstudio](mutate.png)
 
 ### group_by()
 
@@ -123,6 +127,8 @@ This kind of variable is convenient whenever we want to aggregate the data. For 
 ## summarize()
 
 Once we created a grouped data, a common thing to do is to compute various statistics within each group. Here my goal is to get points per touch time in each game. In order to do so, I need a variable of total touch time of a player in each game called ```total_touch```, and a variable of total points ```total_pts```. Next, I divide ```total_pts``` by ```total_touch``` to obtain the per time stat I need. The new data frame should have less observations than the original one because we have condensed the data by a per game basis. Whenever I am collapsing the data while computing new columns, I use ```summarize()```. The variables in the new data frame are the grouping variables plus the summary variables. 
+
+![concept of group_by() then summarize(): from dplyr cheatsheet by Rstudio](group_summarize.png)
 
 ```{r}
 summary.nba <- summarize(data.nba, 
