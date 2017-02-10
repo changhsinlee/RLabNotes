@@ -1,0 +1,100 @@
+---
+title: "Lab 3.5: Tidying & Joining Data"
+author: "Chang-Hsin Lee"
+date: "February 8, 2017"
+output: 
+  html_document:
+    theme: spacelab
+    code_folding: show
+    toc: yes
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, collapse=TRUE, result="hold", fig.height=4, fig.width=6, fig.align="center")
+```
+
+In this lab I will show you more data wrangling techniques. In particular, I will show you a how to convert a common data format (wide) to one that works well in R (long) with the `tidyr` package. The data we use for demonstration here is a trimmed version of pricing and production of goods by country provided by Kenneth Li.
+
+```{r}
+library(readr) # Besides read.csv(), you can load .csv with readr and readr::read_csv
+pricing_wide <- read_csv("Pricing.csv")
+production_wide <- read_csv("Production.csv")
+```
+
+## Long data v.s. wide data
+
+There are two most common representations of data in a table:
+
+1. Wide data: the observed values of interest are stored in the entries of a matrix, while first column and column headers are sets of values from some categorical variables. Excel spreadsheets are often of this form, especially the ones where the values are entered manually.
+
+2. Long data: the table is structured as key-value pairs. This means each row is an observation with a unique identifier (key) and values of interest. The column headers are names of variable.
+
+In general, long data are better suited for scripting. Most statistical modeling packages are also designed for long data. Therefore we need to convert data from wide format to long format. I recommend using `tidyr::gather()` for conversion, but there are other options.
+
+To convert into long format, we need to tell `gather()` what the key-value pair looks like. In the arguments of `gather()` one specifies
+
+1. name of the dataframe to convert
+2. name of key, which is the name of variable defining the column headers
+3. name of value, which is the name of variable defining the entries
+4. the columns to gather.
+
+For example, 
+
+```{r}
+library(tidyr)
+pricing_wide
+
+# convert wide to long
+pricing_long <- gather(pricing_wide, country, price, -good) # gather everything but the "good" column
+pricing_long
+
+production_long <- gather(production_wide, country, amount, -good)
+```
+
+### Tidy data
+
+Hadley Wickham's definition of tidy data:
+
+1. Each variable forms a column.
+2. Each observation forms a row.
+3. Each type of observational unit forms a table.
+
+Basically, it means put your data in long format while making sure there is no redundant information. It is closely tied to the idea of Codd's third normal form (3NF) in relational database management system, most notably implemented in SQL. So when you import data from a SQL database, the data will be in the long format most of the time.
+
+## Combine dataframes
+
+Most of the real world data come in fragments before they are processed. Sometimes it is because batches of data were collected from different times. Sometimes it is because we need to combine several tables from a SQL database. Therefore I'll show you here how to combine two dataframes into one. 
+
+*A word of caution: R does all computation in memory, so if by combining two dataframes your ended up with a dataframe that is larger than the memory available to R (say 64GB on a laptop with 16GB RAM) then your computer may freeze. There are packages that solve R memory problems like `foreach`.*
+
+### Binding by row
+
+Say we have 2 dataframes storing the same type of data with the exact same column name and properties. `rbind()` from base-R also works is slow. A more efficient fuction that I recommend to use is `dplyr::bind_rows()`. As an example,
+
+```{r warning=FALSE, message=FALSE}
+library(dplyr)
+pp <- pricing_long[1:3,] # subset first 3 rows
+pppp <- bind_rows(pp,pp)
+pppp
+```
+
+### Joining dataframes
+
+What about binding the dataframes by column? You can certainly use `bind_cols()` when you have two dataframe of the same length. However, this happens more when you are dealing with wide data. For long data, a better and more reliable way to combine dataframes is using the join functions. Let me start with an example. Consider the two dataframes:
+
+```{r}
+pricing_production <- inner_join(pricing_long, production_long, by=c("good","country"))
+pricing_production
+```
+
+The two dataframes share common columns and we wish to combine them in a way that the new dataframe contains all the information on observations that are present in both tables. The function to use here is `dplyr::inner_join()`. There are different join functions in dplyr which are equivalents of the join functions in SQL. If you need to understand what different join fuctions do, you can read the dplyr cheatsheet or consult the Venn diagrams found in SQL join documents like [here](http://www.sql-join.com/sql-join-types/).
+
+You should also try `left_join()`, `right_join()` and `full_join()`.
+
+*Never use `merge()` from base R. It is SUPER SLOW!*
+
+## Appendix
+
+* [Tidy data vignette](ftp://cran.r-project.org/pub/R/web/packages/tidyr/vignettes/tidy-data.html)
+* [dplyr cheatsheet](https://www.rstudio.com/wp-content/uploads/2015/02/data-wrangling-cheatsheet.pdf)
